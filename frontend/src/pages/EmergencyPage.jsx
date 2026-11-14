@@ -187,17 +187,6 @@ export default function EmergencyPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Dispatch</CardTitle>
-              <CardDescription>No provider is configured</CardDescription>
-            </CardHeader>
-            <CardContent className="text-[13px] leading-relaxed text-muted-foreground">
-              The notification service records every channel it would contact and marks each record
-              <span className="text-foreground"> SIMULATED_NOTIFIED</span>. No SMS, call or webhook leaves this browser.
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
               <CardTitle>Contacts</CardTitle>
               <CardDescription>People the simulated gateway would notify</CardDescription>
             </CardHeader>
