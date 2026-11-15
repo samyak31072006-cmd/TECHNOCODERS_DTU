@@ -254,6 +254,7 @@ export function SessionProvider({ children }) {
       const faceStatus = faceCount === 0 ? 'NO_DRIVER' : faceCount > 1 ? 'MULTIPLE_FACES' : 'SINGLE_FACE';
       const eyes = faceCount ? analyzeEyes(out.faces[0], video.videoWidth, video.videoHeight) : analyzeEyes(null, 0, 0);
       const phone = phoneRef.current.evaluate({
+        objects: out.objects,
         hands: out.hands,
         faceLandmarks: faceCount ? out.faces[0] : null,
         width: video.videoWidth,
@@ -290,9 +291,9 @@ export function SessionProvider({ children }) {
         pushAlert({
           type: 'Phone distraction',
           severity: 'HIGH',
-          message: 'Hand landmarks entered the ear/cheek zone for three consecutive frames.',
+          message: 'Cell phone detected at or above chin level.',
         });
-        pushToast({ tone: 'warn', title: 'Phone detected', message: 'Handheld device near the face.' });
+        pushToast({ tone: 'warn', title: 'Phone detected', message: 'Cell phone in use.' });
       }
       lastStatusRef.current = drowsy.status;
       phoneWasRef.current = phone.phone_detected;
@@ -389,7 +390,7 @@ export function SessionProvider({ children }) {
 
   const ensureEngine = useCallback(async () => {
     if (engineRef.current) return engineRef.current;
-    setEngineStatus({ state: 'loading', delegate: null, message: 'Loading the face and hand landmarkers' });
+    setEngineStatus({ state: 'loading', delegate: null, message: 'Loading vision models' });
     setEngineError(null);
     try {
       const engine = await createVisionEngine({
@@ -397,7 +398,7 @@ export function SessionProvider({ children }) {
           setEngineStatus((prev) => ({ ...prev, state, message, delegate: prev.delegate })),
       });
       engineRef.current = engine;
-      setEngineStatus({ state: 'ready', delegate: engine.delegate, message: `Landmarkers ready (${engine.delegate})` });
+      setEngineStatus({ state: 'ready', delegate: engine.delegate, message: `Vision models ready (${engine.delegate})` });
       return engine;
     } catch (error) {
       setEngineStatus({ state: 'error', delegate: null, message: error.message });

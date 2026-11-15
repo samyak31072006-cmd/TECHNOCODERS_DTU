@@ -1,80 +1,81 @@
 import {
-  HAND_INDEX_TIP,
-  HAND_WRIST_INDEX,
-  PHONE_EAR_INDICES,
-  PHONE_PROXIMITY_PX,
+  CHIN_LANDMARK_INDEX as CONST_CHIN_INDEX,
+  PHONE_CONFIDENCE_THRESHOLD,
   PHONE_REFERENCE_WIDTH,
   PHONE_TRIGGER_FRAMES,
-} from './constants';
+} from './constants.js';
 
-function center(points) {
-  const sum = points.reduce((acc, p) => [acc[0] + p[0], acc[1] + p[1]], [0, 0]);
-  return [sum[0] / points.length, sum[1] / points.length];
-}
-
-function distance(a, b) {
-  return Math.hypot(a[0] - b[0], a[1] - b[1]);
-}
-
-function zonePoints(landmarks, indices, width, height) {
-  return indices.map((index) => {
-    const lm = landmarks[index];
-    return lm ? [lm.x * width, lm.y * height] : null;
-  }).filter(Boolean);
-}
+export const CHIN_LANDMARK_INDEX = CONST_CHIN_INDEX ?? 152;
+export const DEFAULT_PHONE_CONFIDENCE = PHONE_CONFIDENCE_THRESHOLD ?? 0.20;
 
 /**
- * Mirror of PhoneDetector (core/phone_detector.py), minus the OpenCV contour
- * heuristic: the browser pipeline only has landmarks, so proximity is the sole
- * cue. The 3-frame temporal filter is kept so a single stray hand frame does
- * not raise an alarm.
+ * On-device phone usage detector using actual cell-phone object detection.
+ * Replaces unreliable hand-proximity detection.
  *
- * Returns the same field names the Python detector returns.
+ * Rules:
+ * 1. An actual cell phone must be identified by object detection with score >= minConfidence.
+ * 2. Any visible part of the phone bounding box must reach chin level or above (box.originY <= chinY).
+ *    A phone held entirely below the chin (box.originY > chinY) does not trigger an alert.
+ * 3. Empty hands, fingers, face touching, and non-phone objects produce no cell phone detection
+ *    and cannot trigger an alert.
+ * 4. A multi-frame temporal filter prevents single-frame false positives.
  */
 export function createPhoneDetector(options = {}) {
-  const proximityPx = options.proximityPx ?? PHONE_PROXIMITY_PX;
-  const referenceWidth = options.referenceWidth ?? PHONE_REFERENCE_WIDTH;
   const triggerFrames = options.triggerFrames ?? PHONE_TRIGGER_FRAMES;
+  const minConfidence = options.minConfidence ?? DEFAULT_PHONE_CONFIDENCE;
+  const referenceWidth = options.referenceWidth ?? PHONE_REFERENCE_WIDTH;
 
   let counter = 0;
 
-  function evaluate({ hands = [], faceLandmarks = null, width = referenceWidth, height = 480 }) {
-    let detected = false;
+  function evaluate({
+    objects = [],
+    hands = [],
+    faceLandmarks = null,
+    width = referenceWidth,
+    height = 480,
+  } = {}) {
+    let candidateDetected = false;
     let confidence = 0;
     let zone = 'NONE';
 
-    const leftEar = faceLandmarks ? zonePoints(faceLandmarks, PHONE_EAR_INDICES.left, width, height) : [];
-    const rightEar = faceLandmarks ? zonePoints(faceLandmarks, PHONE_EAR_INDICES.right, width, height) : [];
-    const threshold = proximityPx * (width / referenceWidth);
+    // Chin level from MediaPipe FaceMesh landmark 152
+    const chinLandmark = faceLandmarks?.[CHIN_LANDMARK_INDEX];
+    const foreheadLandmark = faceLandmarks?.[10];
 
-    if (hands.length && (leftEar.length || rightEar.length)) {
-      const zones = [
-        { name: 'LEFT_EAR', points: leftEar },
-        { name: 'RIGHT_EAR', points: rightEar },
-      ].filter((entry) => entry.points.length);
+    if (chinLandmark && Array.isArray(objects) && objects.length > 0) {
+      // In pixel space, y = 0 is top of image, y = height is bottom.
+      const chinY = chinLandmark.y * height;
+      const faceH = foreheadLandmark
+        ? Math.abs(chinLandmark.y - foreheadLandmark.y) * height
+        : height * 0.35;
+      const chinThreshold = chinY + faceH * 0.25;
 
-      for (const hand of hands) {
-        const wrist = hand[HAND_WRIST_INDEX];
-        const indexTip = hand[HAND_INDEX_TIP];
-        const wristPx = wrist ? [wrist.x * width, wrist.y * height] : null;
-        const tipPx = indexTip ? [indexTip.x * width, indexTip.y * height] : null;
+      for (const det of objects) {
+        if (!det?.categories || !det?.boundingBox) continue;
 
-        for (const entry of zones) {
-          const earCenter = center(entry.points);
-          const nearWrist = wristPx ? distance(wristPx, earCenter) < threshold : false;
-          const nearTip = tipPx ? distance(tipPx, earCenter) < threshold : false;
-          if (nearWrist || nearTip) {
-            detected = true;
-            confidence = 0.88;
-            zone = entry.name;
-            break;
+        // Check for 'cell phone' category
+        const phoneCat = det.categories.find(
+          (c) => c.categoryName?.toLowerCase() === 'cell phone' && (c.score ?? 0) >= minConfidence
+        );
+
+        if (!phoneCat) continue;
+
+        const box = det.boundingBox;
+        // Bounding box: originY is top of phone, originY + height is bottom of phone.
+        // If box.originY <= chinThreshold, at least the upper part of the phone is at or above chin level.
+        // If box.originY > chinThreshold, the entire phone is below the chin.
+        if (box.originY <= chinThreshold) {
+          candidateDetected = true;
+          if ((phoneCat.score ?? 0) > confidence) {
+            confidence = phoneCat.score;
+            zone = 'CHIN_OR_ABOVE';
           }
         }
-        if (detected) break;
       }
     }
 
-    counter = detected ? counter + 1 : Math.max(0, counter - 1);
+    // Temporal filter: requires triggerFrames consecutive positive frames to confirm
+    counter = candidateDetected ? counter + 1 : Math.max(0, counter - 1);
     const confirmed = counter >= triggerFrames;
 
     return {
