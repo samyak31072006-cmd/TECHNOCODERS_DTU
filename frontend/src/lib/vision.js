@@ -101,16 +101,17 @@ export async function createVisionEngine({ onStatus } = {}) {
               const fMaxY = Math.max(...ys);
               const fW = fMaxX - fMinX;
               const fH = fMaxY - fMinY;
+              const centerX = (fMinX + fMaxX) / 2;
 
-              // Expand horizontally by 105% of face width to cover ears, cheeks, and phone profile
-              // Expand vertically by 45% above forehead and 85% below chin to include chin-held phone body
-              const padX = fW * 1.05;
+              // Symmetrical horizontal pad from face center: covers left ear and right ear identically (135% of face width)
+              // Symmetrical vertical coverage: covers upper face / forehead, cheeks, mouth, jawline, and chin
+              const halfW = fW * 1.35;
               const padTop = fH * 0.45;
               const padBottom = fH * 0.85;
 
-              cropX = Math.max(0, Math.floor(fMinX - padX));
+              cropX = Math.max(0, Math.floor(centerX - halfW));
               cropY = Math.max(0, Math.floor(fMinY - padTop));
-              cropW = Math.min(W - cropX, Math.ceil(fW + 2 * padX));
+              cropW = Math.min(W - cropX, Math.ceil(halfW * 2));
               cropH = Math.min(H - cropY, Math.ceil(fH + padTop + padBottom));
             }
 
