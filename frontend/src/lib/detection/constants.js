@@ -21,7 +21,7 @@ export const PHONE_PROXIMITY_PX = 85; // measured against a 640 px wide frame
 export const PHONE_REFERENCE_WIDTH = 640;
 export const PHONE_TRIGGER_FRAMES = 2;
 export const CHIN_LANDMARK_INDEX = 152;
-export const PHONE_CONFIDENCE_THRESHOLD = 0.20;
+export const PHONE_CONFIDENCE_THRESHOLD = 0.25;
 
 // core/accident_detector.py
 export const ACCIDENT_THRESHOLDS = {

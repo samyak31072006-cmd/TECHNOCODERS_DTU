@@ -19,7 +19,7 @@ function buildDetector(fileset, delegate) {
   return ObjectDetector.createFromOptions(fileset, {
     baseOptions: { modelAssetPath: PHONE_MODEL, delegate },
     runningMode: 'IMAGE',
-    scoreThreshold: 0.15,
+    scoreThreshold: 0.18,
     categoryAllowlist: ['cell phone'],
     maxResults: 5,
   });

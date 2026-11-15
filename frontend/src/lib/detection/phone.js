@@ -61,6 +61,24 @@ export function createPhoneDetector(options = {}) {
         if (!phoneCat) continue;
 
         const box = det.boundingBox;
+        const bw = Math.max(1, box.width);
+        const bh = Math.max(1, box.height);
+        const maxDim = Math.max(bw, bh);
+        const minDim = Math.min(bw, bh);
+        const aspectRatio = maxDim / minDim;
+
+        // Secondary verification against empty-hand false positives:
+        // A cell phone is an elongated rectangle (aspect ratio >= 1.25) with substantial physical size.
+        // Cupped hands, palms, or curled fingers produce squarish boxes (aspect ratio < 1.25)
+        // or small local patches (< 25% of face height).
+        if (phoneCat.score < 0.45) {
+          const isElongated = aspectRatio >= 1.25;
+          const hasPhoneSize = maxDim >= faceH * 0.25;
+          if (!isElongated || !hasPhoneSize) {
+            continue;
+          }
+        }
+
         // Bounding box: originY is top of phone, originY + height is bottom of phone.
         // If box.originY <= chinThreshold, at least the upper part of the phone is at or above chin level.
         // If box.originY > chinThreshold, the entire phone is below the chin.
